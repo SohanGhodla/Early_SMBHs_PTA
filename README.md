@@ -1,4 +1,6 @@
 
+### Whats included
+
 This repository contains the code to recreate the plots in the paper arXiv: [2507.06163](https://arxiv.org/abs/2507.06163)
 
  - The `src`directory contains the code used for calculating the stochastic gravitational wave background (SGWB) resulting from early seeding of super massive black holes (SMBHs). The seeding mechanism is assumed to be via the collapse of *super massive dark stars* but the code works independent of the assumed seeding mechanism as long as some mechanism can produce the seeds.
