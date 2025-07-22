@@ -54,20 +54,21 @@ class BHMergerRateDensity:
             t_i,
         )
 
-        # hash *that* key
+        # hash the key
         key_hash = hashlib.md5(repr(key).encode()).hexdigest()
         cache_path = os.path.expanduser(f"~/.cache/bhmerger/bhmerger_{key_hash}.pkl")
 
-        # 3) In‐memory cache
+        # In‐memory cache
         if cache_path in cls._cache:
             inst = cls._cache[cache_path]
             inst._initialized = True  
             return inst
 
 
-        # 4) On‐disk cache
+        # On‐disk cache
         if os.path.exists(cache_path):
             cls._unpickling = True
+            # print({key_hash})
             try:
                 with open(cache_path, "rb") as f:
                     inst = pickle.load(f)
@@ -77,7 +78,7 @@ class BHMergerRateDensity:
             cls._cache[cache_path] = inst
             return inst
 
-        # 5) Fresh instance
+        # Fresh instance
         inst = super().__new__(cls)
         inst._cache_path        = cache_path
         inst._initialized = False
@@ -92,7 +93,7 @@ class BHMergerRateDensity:
         """
         if self._initialized:
             print("Using previous instance of BHMergerRateDensity; skipping precompute. \n"
-                "Use BHMergerRateDensity.clear_cache() to recompute - will take 5–15 mins.")
+                "Use BHMergerRateDensity.clear_cache() to recompute - will take 10–20 mins.")
             return
         self._initialized = True
 
@@ -108,8 +109,6 @@ class BHMergerRateDensity:
         # Set up an astropy cosmology instance.
         self.cosmo = LambdaCDM(H0=self.h * 100, Om0=self.omega_m0, Ode0=self.omega_l0)
 
-        
-        
         # Instantiate the extended mapping interpolator.
         self.BHhalomapping = BHhaloInterp(z_final_vals=np.linspace(1e-2, 6, 10))
 
@@ -118,7 +117,7 @@ class BHMergerRateDensity:
             self.precompute_Rh_interpolator(m1, m2)
 
         # Precompute the p_merg interpolation 
-        if not hasattr(self, 'p_merg_interp'): 
+        if not hasattr(self, '_p_merg_dist'): 
             self.p_merg() 
 
         self.precompute_dndM_interpolator(m1)
@@ -130,7 +129,7 @@ class BHMergerRateDensity:
         print(f"Cached BHMergerRateDensity to {self._cache_path}")
 
     def precompute_dndM_interpolator(self, m):
-        seeds  = self.BHhalomapping.m_seeds   # your array of seed masses
+        seeds  = self.BHhalomapping.m_seeds   # array of seed masses
         z_grid = np.logspace(-2.2, 1.0, 300)
 
         self.dndM_seeds         = seeds
@@ -161,69 +160,7 @@ class BHMergerRateDensity:
         M1[M1 <= threshold] = threshold
         dn_dm = hmf_z.dndm(M1 / self.h)
 
-        # mask = M1 <= threshold
-        # # set those entries to a small floor
-        # dn_dm[mask] = 1e-99
         return dn_dm
-
-    # def p_occ(self, m, z_prime,
-    #           m_seed, n_BH, mu, sigma, logM_min, zmax = 10):
-    #     """
-    #     Occupation fraction at z_prime for BH masses m:
-    #       p_occ = n_BH * p_trunc_logN(M1; z') / phi(M1; z')
-
-    #     Parameters:
-    #     -----------
-    #     m           : array_like  BH masses in Msun
-    #     z_prime     : float       redshift
-    #     m_seed      : float       BH‐seed mass for the BH→halo mapping
-    #     n_BH        : float       total seed‐halo comoving density [Mpc⁻³]
-    #     mu          : float       ⟨M⟩ at z=zmax in log10
-    #     sigma       : float       scatter of log10 M (dex)
-    #     logM_min    : float       lower truncation of log10 M (dex)
-    #     zmax  
-    #     """
-
-    #     # Map BH mass -> host‐halo mass
-    #     M1 = self.M_of_m(m, z_prime, m_seed)
-    #     threshold = self.M_of_m(m_seed * 2., z_prime, m_seed) 
-    #     M1[M1 <= threshold] = threshold
-
-    #     # Evolve the z=zmax seed‐halo log-normal mean & lower bound to z_prime
-    #     M0_mu  = 10**mu
-    #     M0_min = 10**logM_min
-
-    #     mu_z   = HaloMassHistory(M0_mu,  zmax, self.hmf_0).mass_at_z_from_zi(z_prime)
-    #     Mmin_z = HaloMassHistory(M0_min, zmax, self.hmf_0).mass_at_z_from_zi(z_prime)
-
-    #     # Fetch precomputed halo mass function : dndM(M1, z_prime)
-    #     idx       = np.argmin(np.abs(self.dndM_seeds - m_seed))
-    #     dndM_falt  = self.dndM_interpolators[idx]([z_prime])[0]
-    #     dndM_val    = dndM_falt.reshape(M1.shape)
-
-    #     # Build the "one‐sided" truncated log‐normal PDF in log10 M
-    #     logmu_z   = np.log10(mu_z)
-    #     logmin_z  = np.log10(Mmin_z)
-
-    #     # only lower truncation:
-    #     a         = (logmin_z - logmu_z)/sigma
-    #     Z         = 1.0 - norm.cdf(a)
-
-    #     logM1     = np.log10(M1)
-    #     p_dex     = np.exp(-0.5*((logM1 - logmu_z)/sigma)**2) \
-    #                 / (sigma * np.sqrt(2*np.pi))
-    #     p_M       = p_dex / (M1 * np.log(10) * Z)
-
-    #     # zero below the minimum
-    #     p_M[M1 < Mmin_z] = 0.0
-
-    #     # Bayes ratio and clamp to [0,1]
-    #     p_occ_value   = n_BH * p_M / dndM_val
-    #     np.clip(p_occ_value, 0.0, 1.0, out=p_occ_value)
-
-    #     return p_occ_value
-    
-
 
     def p_occ(self, m, z_prime,
             m_seed, n_BH, mu, sigma, logM_min, zmax=10):
@@ -268,7 +205,7 @@ class BHMergerRateDensity:
         p_cdf[M1 < Mmin_z] = 0.0                       # zero below absolute min
 
         # Solve for p_max by matching n_BH = ∫ p_cdf(M) φ(M) dM
-        #    approximate integral with trapezoidal rule over unique M1
+        #  approximate integral with trapezoidal rule over unique M1
         M_list = M1[0]
         phi_list = phi[0]
         p_list   = p_cdf[0]
@@ -279,7 +216,7 @@ class BHMergerRateDensity:
         p_occ_val = np.clip(p_max * p_cdf, 0.0, 1.0)
         return p_occ_val
 
-    
+    # -------- Old one ----------
     # def p_occ(self, m, z_prime, M_seed, m_seed):
     #     """
     #     Occupation fraction: probability that a halo hosting a BH of mass m at z_prime
@@ -288,7 +225,7 @@ class BHMergerRateDensity:
     #     Parameters:
     #     -----------
     #     m        : array_like
-    #             BH masses [M☉]
+    #             BH masses [Msun]
     #     z_prime  : float
     #             Redshift
     #     M_seed   : float
@@ -359,6 +296,7 @@ class BHMergerRateDensity:
             return self.BHhalomapping.dM_dm(m, 5, m_seed)
         return self.BHhalomapping.dM_dm(m, z, m_seed)
 
+    # ----------- Used before MC implementation ---------
     # def p_merg(self, tau0=1.0, sigma=1/3):
     #     """
     #     Returns a 1/yr PDF for the delay-time τ (in Gyr) between halo merger
@@ -406,7 +344,7 @@ class BHMergerRateDensity:
     #         fill_value=0.0, # zero outside the grid
     #     )
     
-    def p_merg(self, tau0=1.0, sigma=1/3):
+    def p_merg(self, tau0=1.0, sigma=0.5):
         """
         Build and return a log-normal delay-time distribution for τ [in Gyr]:
           p(τ) = LogNorm(sigma, scale=exp(mu)),  mu = ln(tau0) - 0.5*sigma^2
@@ -420,10 +358,6 @@ class BHMergerRateDensity:
         self._p_merg_dist = dist
         return dist
     
-        # mu   = np.log(tau0) - 0.5 * sigma**2
-        # dist = lognorm(s=sigma, scale=np.exp(mu))
-        # self._p_merg_dist = dist
-        # return dist
     
     def mass_seed(self, m_low, m_high, mean_log, sigma_dex = 1/3):
         """
@@ -445,7 +379,6 @@ class BHMergerRateDensity:
 
         # draw one sample of X = log10(M)
         x_sample = truncnorm.rvs(a, b, loc=mu, scale=sigma, size=1)
-
         return 10**x_sample.item()
 
     def cosmic_time(self, z):
@@ -495,13 +428,9 @@ class BHMergerRateDensity:
 
 
         Rh = hmr_z.compute_Rh(M1/self.h, M2/self.h)
-
-        # #2D mask: True wherever m1<1.3*m_seed OR m2<1.3*m_seed
-        # mask = (M1 <= threshold) | (M2 <= threshold)
-        # Rh[mask] = 1e-99
-        # Rh[M2 >= M1] = 0.
         return Rh
 
+    # ------- Doesn't use threading - threading better for pickling ---------
     # def precompute_Rh_interpolator(self, m1, m2):
     #     n_z = 300
     #     z_prime_grid = np.logspace(-2.2, 1, n_z) 
@@ -548,9 +477,6 @@ class BHMergerRateDensity:
     #     """
     #     Compute the comoving black hole merger rate density d²R_BH / (d m1 d m2).
 
-    #     Use Monte‐Carlo estimate of using n_samples random draws of t′.
-    #     We use importance-sampling  by drawing τ = t − t' from the log-normal merger-delay PDF.
-   
     #     Parameters:
     #     - m1: Mass of the first black hole (Msun).
     #     - m2: Mass of the second black hole (Msun).
@@ -612,7 +538,7 @@ class BHMergerRateDensity:
         # return R_BH  # Units:  Mpc^{-3} yr^{-1} Msun^{-2}
         
         
-    def compute_R_BH(self, m1, m2, t, n_samples=5000):
+    def compute_R_BH(self, m1, m2, mu_val, t, tau0=1.0, sigma_tau=0.5, n_samples=5000):
         """
         MC-estimate of R_BH(m1,m2) via direct sampling from the full log-normal p_merg.
         Returns R_BH of shape m1.shape.
@@ -621,7 +547,7 @@ class BHMergerRateDensity:
             raise ValueError("t_merger [i.e., t] is less than t_i")
         
         # Draw delay times [Gyr] -- log-normal distribution
-        dist = self.p_merg(tau0=1.0, sigma=1/3)
+        dist = self.p_merg(tau0, sigma_tau)
         tau_gyr  = dist.rvs(size=n_samples)  # draws on [0, inf) -- shape (n_samples,)
 
         # Convert to cosmic times [yr]
@@ -634,8 +560,6 @@ class BHMergerRateDensity:
             z_p = z_at_value(self.cosmo.age, (t_p/1e9) * u.Gyr).value
 
             # random seed‐masses
-            # M_seed_1  = self.mass_seed(m_low=7.75, m_high=9.25, mean_log=8.75)
-            # M_seed_2  = self.mass_seed(m_low=7.75, m_high=9.25, mean_log=8.75)
             m_seed = self.mass_seed(m_low=4.0,  m_high=6.0,  mean_log=5.0)
 
             # Compute R_h(t') = d^3 R_h / dM1 dM2 dt' at z_prime
@@ -646,8 +570,8 @@ class BHMergerRateDensity:
             # Rh_flat = self.Rh_interpolator(np.array([z_prime]))[0] # Consider only first element as rest are identical (made N1 copies for vectorization)
             Rh = Rh_flat.reshape(m1.shape)
 
-            p1 = self.p_occ(m1, z_p, m_seed, n_BH = 2e-3, mu = 8.75, sigma = 1/3, logM_min = 7.75)
-            p2 = p1.T #self.p_occ(m1, z_p, m_seed, n_BH = 2e-3, mu = 8.75, sigma = 1/3, logM_min = 7.75).T # don't use mass m2 as the first parameter (see p_occ's M1[0] term)
+            p1 = self.p_occ(m1, z_p, m_seed, n_BH = 5e-3, mu = mu_val, sigma = 0.5, logM_min = 7)
+            p2 = p1.T # don't use mass m2 as the first parameter (see p_occ's M1[0] term)
             d1 = self.dM_dm(m1, z_p, m_seed)
             d2 = d1.T # self.dM_dm(m2, z_p, m_seed)
 

@@ -2,21 +2,16 @@ import numpy as np
 from scipy.optimize import brentq
 
 class HaloMassHistory:
-    """ Class to calculate the evolution of halo masses over time given the progenitor halo mass at redshift """
+    """ Class to calculate the evolution of halo masses over time given the progenitor halo mass at some redshift """
     def __init__(self, mass_at_zi, zi, halomassfunction):
         """
         Parameters:
         -----------
-        mass_at_zi : float
-            Halo mass at the progenitor redshift zi.
-        zi : float
-            Progenitor redshift (where the mass is known).
+        mass_at_zi : Halo mass at the progenitor redshift zi.
+        zi : Progenitor redshift (where the mass is known).
         halomassfunction : object
-            Instance of the HaloMassFunction class (provides methods for D(z), sigma(M), etc.)
+            Instance of the HaloMassFunction class (contains methods for D(z), sigma(M), etc.)
         
-        This new version uses the correct EPS-based method (via a Brent search) to compute 
-        the descendant mass at z=0 (M0), but maintains the same variable names as the old version.
-
         Based on arXiv:1409.5228
         """
         self.Mzi = mass_at_zi  # Progenitor mass at redshift zi

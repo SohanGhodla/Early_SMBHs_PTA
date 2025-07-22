@@ -23,7 +23,7 @@ class BHhaloInterp():
     _unpickling = False   
 
     def __new__(cls, *args, **kwargs):
-        # reproduce your caching key
+        # reproduce caching key
         z_final_vals = np.array(kwargs.get("z_final_vals", np.linspace(1e-2, 6., 10)))
         m_seeds      = np.atleast_1d(kwargs.get("m_seeds", np.logspace(4, 5.7, 10)))
         key = (
@@ -34,7 +34,7 @@ class BHhaloInterp():
             kwargs.get("lambda_0", 0.003),
             kwargs.get("beta", 2.5),
             kwargs.get("epsilon", 0.1),
-            kwargs.get("halo_mass_min", 1e3),
+            kwargs.get("halo_mass_min", 1e7),
             kwargs.get("halo_mass_max", 1.93e9),
             kwargs.get("num_points", 10000),
             kwargs.get("h", 0.674),
@@ -84,7 +84,7 @@ class BHhaloInterp():
                  lambda_0=0.003,
                  beta=2.5,
                  epsilon=0.1,
-                 halo_mass_min=1e3,
+                 halo_mass_min=1e7,
                  halo_mass_max=1.93e9,
                  num_points=10000,
                  h=0.674,
@@ -149,8 +149,7 @@ class BHhaloInterp():
         #                 self.black_hole_mass_at_z(M, zf, m_seed=m0)
         #             )
 
-        # 1) Halo‐mass grid: parallelize over z slices
-
+        # Halo‐mass grid: parallelize over z slices
         def _compute_halo_row(zf):
             # returns a length‐num_M row of halo masses at redshift zf
             return [
@@ -163,7 +162,7 @@ class BHhaloInterp():
             delayed(_compute_halo_row)(zf)
             for zf in self.z_final_vals
         )
-        # rows is a list of length num_z, each an array of length num_M
+        # rows has length num_z, each an array of length num_M
         self.halo_mass_grid = np.vstack(rows)     # shape (num_z, num_M)
 
 
@@ -183,7 +182,7 @@ class BHhaloInterp():
             for s in range(len(self.m_seeds))
         )
 
-        # pack them back into your 3D array
+        # pack them back into 3D array
         for s, block in slices:
             self.bh_mass_grid[s, :, :] = block
 
@@ -203,17 +202,17 @@ class BHhaloInterp():
         bh = self.bh_mass_grid[s, i, :]
         hm = self.halo_mass_grid[   i, :]
 
-        # 1) log–log
+        # log–log
         logbh = np.log10(bh)
         loghm = np.log10(hm)
 
-        # 2) ensure strictly increasing
+        # ensure strictly increasing
         if not np.all(np.diff(logbh) > 0):
             idx = np.argsort(logbh)
             logbh, loghm = logbh[idx], loghm[idx]
             bh,   hm     = bh[idx],   hm[idx]
 
-        # 3) finite‐difference in log–log
+        # finite‐difference in log–log
         # dloghm_dlogbh = np.gradient(loghm, logbh)
 
         # build a PCHIP in log–log
@@ -222,15 +221,15 @@ class BHhaloInterp():
         # derivative d(log hm)/d(log bh)
         dloghm_dlogbh = pchip.derivative()(logbh)
 
-        # 4) mask plateau at the seed
+        # mask plateau at the seed
         eps = 0.005  # 0.05%
         flat = np.abs(logbh - np.log10(m_seed)) < np.log10(1+eps)
         dloghm_dlogbh[flat] = 0
 
-        # 5) convert back to dM/dm
+        # convert back to dM/dm
         slopes = (10**(loghm - logbh)) * dloghm_dlogbh
 
-        # 6) build the two interp1d’s
+        # build the two interp1d’s
         bh2halo = interp1d(
             bh, hm,
             kind='linear',
@@ -266,7 +265,7 @@ class BHhaloInterp():
             for s, i, m_seed in tasks
         )
 
-        # Stitch results back into your 2D lists
+        # Stitch results back into 2D lists
         for s, i, bh2halo, dMdm in results:
             self.BHhalo_interps[s][i] = bh2halo
             self.dM_dm_interps[s][i]  = dMdm
@@ -301,6 +300,11 @@ class BHhaloInterp():
     
     def lambda_M(self, z, M, lambda_0, beta, m_seed):
         """Calculate the Eddington factor lambda """
+
+        # if the mass of the halo is lower than the minimum allowed halo mass the BH can't grow (actually it won't even form)
+        if M <= self.halo_mass_min:
+            return 0.0
+    
         lambda_star_z = lambda_0 * (1 + z)**beta
         m_fixed = 1e4
         M_break = 5e11 * (1 + z)**(-1.5) * (m_seed/m_fixed)**0.5
@@ -349,76 +353,3 @@ class BHhaloInterp():
         # reset in-memory cache
         cls._cache.clear()
         cls._unpickling = False
-
-
-
-
-        # # build inverse (bh_mass→halo_mass) interpolators
-        # self.BHhalo_interps = [[None]*num_z for _ in range(num_s)]
-        # self.dM_dm_interps   = [[None]*num_z for _ in range(num_s)]       
-        # for s, m_seed in enumerate(self.m_seeds):
-        #     for i in range(num_z):
-        #         bh = self.bh_mass_grid[s, i, :]
-        #         hm = self.halo_mass_grid[     i, :]
-
-        #         # 1) work in log10
-        #         logbh = np.log10(bh)
-        #         loghm = np.log10(hm)
-
-        #         # 2) check monotonicity (must be strictly increasing)
-        #         if not np.all(np.diff(logbh) > 0):
-        #             idx = np.argsort(logbh)
-        #             logbh, loghm = logbh[idx], loghm[idx]
-
-        #         # 3) derivative d(log M)/d(log m)
-        #         dloghm_dlogbh = np.gradient(loghm, logbh)
-
-        #         # 4) convert back:   dM/dm = (M/m) * d logM/d logm
-        #         #    = 10^(loghm−logbh) * (dloghm_dlogbh)
-        #         eps = 0.01     # 1% tolerance
-        #         flat_mask = np.abs(logbh - np.log10(m_seed)) < np.log10(1 + eps)
-
-        #         # force zero slope in the flat part:
-        #         dloghm_dlogbh[flat_mask] = 0
-        #         slopes = (10**(loghm - logbh)) * dloghm_dlogbh
-
-        #         # 5) build the actual interpolators on the _linear_ scale
-        #         self.BHhalo_interps[s][i] = interp1d(
-        #             bh, hm,
-        #             kind='linear',
-        #             bounds_error=False,
-        #             fill_value='extrapolate'
-        #         )
-        #         self.dM_dm_interps[s][i] = interp1d(
-        #             bh, slopes,
-        #             kind='linear',
-        #             bounds_error=False,
-        #             fill_value='extrapolate'
-        #         )
-        
-      
-
-        # self.BHhalo_interps = [
-        #     [interp1d(self.bh_mass_grid[s,i,:],
-        #               self.halo_mass_grid[i,:],
-        #               kind='linear',
-        #               bounds_error=False,
-        #               fill_value='extrapolate')
-        #               PchipInterpolator(self.bh_mass_grid[s,i,:], self.halo_mass_grid[i,:], extrapolate=True)
-        #      for i in range(num_z)]
-        #     for s in range(num_s)
-        # ]
-
-        # # build finite-difference slopes + interp1d
-        # self.dM_dm_interps = [
-        #     [interp1d(
-        #         self.bh_mass_grid[s,i,:],
-        #         savgol_filter(np.gradient(self.halo_mass_grid[i,:],
-        #                     self.bh_mass_grid[s,i,:]), window_length=11, polyorder=3),
-        #         kind='linear',
-        #         bounds_error=False,
-        #         fill_value='extrapolate'
-        #     )
-        #      for i in range(num_z)]
-        #     for s in range(num_s)
-        # ]

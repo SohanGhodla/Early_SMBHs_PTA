@@ -21,10 +21,11 @@ class SGWBEnergyDensity:
     
         self.h = 0.674
         self.H0 = self.h * 100 / constants.Mpc_km  # in seconds
-        self.rho_c = 3 * (self.H0)**2 / (8*np.pi*constants.G_const_Mpc_Msun_s) 
+        self.c_light = constants.c_light_Mpc_s  # Speed of light [Mpc/s]
+        self.rho_c = 3 * (self.H0)**2 / (8*np.pi*constants.G_const_Mpc_Msun_s) * (self.c_light**2)
         self.omega_m =  0.315
         self.omega_l = 0.685
-        self.c_light = constants.c_light_Mpc_s  # Speed of light [Mpc/s]
+        
         self.G_Mpc_Msun_s = constants.G_const_Mpc_Msun_s # Gravitational const.
         self.m1 = m1
         self.m2 = m2
@@ -115,8 +116,9 @@ class SGWBEnergyDensity:
 
         # Luminoisty distance in Mpc
         D_lum = (1 + z) * self.comoving_distance(z)
+        D_lum_sec = D_lum / self.c_light
         M_sec = self.G_Mpc_Msun_s / self.c_light**3 # [s]
-        C_waveform = ((1 + z) * M * M_sec)**(5/6) * f_merg**(-7/6) / (D_lum * np.pi**(2/3)) * np.sqrt(5 * eta / 24)
+        C_waveform = ((1 + z) * M * M_sec)**(5/6) * f_merg**(-7/6) / (D_lum_sec * np.pi**(2/3)) * np.sqrt(5 * eta / 24)
         
         # weight w
         w = (np.pi * sigma / 2) * (f_ring / f_merg)**(-2/3)
@@ -383,7 +385,7 @@ class SGWBEnergyDensity:
         
     # ------------------------ End of interpolations -------------------------
     
-    def integrand_z(self, z, f):
+    def integrand_z(self, z, f, mu):
         """
         Compute the integrand for Omega_GW(f).
         
@@ -401,7 +403,7 @@ class SGWBEnergyDensity:
         t_at_z = self.cosmic_time(z)  # in yr
 
         # d2R_BH / dm1 dm2
-        R_BH = self.bh_merger_rate_density.compute_R_BH(self.m1, self.m2, t_at_z) # [yr^-1 Msun^-2 Mpc^-3]
+        R_BH = self.bh_merger_rate_density.compute_R_BH(self.m1, self.m2, mu, t_at_z) # [yr^-1 Msun^-2 Mpc^-3]
 
         dV = self.compute_dV(z)  # [Mpc^3]
         
@@ -420,7 +422,7 @@ class SGWBEnergyDensity:
         return integrand  # [appropriate units]
     
 
-    def compute_Omega_GW_single(self, f, z_max):
+    def compute_Omega_GW_single(self, f, z_max, mu):
         """
         Compute Omega_GW for a single frequency.
         
@@ -432,14 +434,14 @@ class SGWBEnergyDensity:
         - Omega_GW at frequency f
         """
         def integrand(z):
-            return self.integrand_z(z, f)
+            return self.integrand_z(z, f, mu)
         
         # Perform integral over z 
         Omega_GW_f, _ = quad(integrand, 1e-2, z_max, limit=10)
         
         return Omega_GW_f
     
-    def compute_Omega_GW(self, f_array, z_max):
+    def compute_Omega_GW(self, f_array, z_max, mu):
         """
         Compute Omega_GW(f) over a range of frequencies.
         
@@ -465,7 +467,7 @@ class SGWBEnergyDensity:
 
         self.bh_merger_rate_density = BHMergerRateDensity(0, self.m1, self.m2)
         Omega_GW = Parallel(n_jobs=-1)(
-            delayed(self.compute_Omega_GW_single)(f, z_max) for f in f_array
+            delayed(self.compute_Omega_GW_single)(f, z_max, mu) for f in f_array
         )
         
         Omega_GW = np.array(Omega_GW) / self.rho_c  # Normalize by critical density 
