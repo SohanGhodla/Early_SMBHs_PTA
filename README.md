@@ -7,6 +7,12 @@ This repository contains the code to recreate the plots in the paper arXiv: [250
 
  - The `sshRun.py` file is provided for batching the job on a cluster.
 
+ - The `PTA_data` directory contain PTA observations.
+
+ - The `Figure` directory contains the plots used in the paper.
+
+ - The `outputForPlots` directory contain the csv files generated via ssh runs that are then plotted in the `plotMain.ipynb`.
+
 
 ### Installation instructions
 
