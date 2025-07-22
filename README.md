@@ -18,7 +18,7 @@ This repository contains the code to recreate the plots in the paper arXiv: [250
 
 ### Installation instructions
 
-This code was built in `python 3.12`. For best outcome use `pyenv` to run this program in the same **Python version**. Begin by creating a virtual environment and then install dependencies uisng 
+This code was built in `python 3.12`. For best outcome use `pyenv` to run this program in the same Python version. Begin by creating a virtual environment and then install dependencies uisng 
 
 ```bash
 python -r requirements.txt
