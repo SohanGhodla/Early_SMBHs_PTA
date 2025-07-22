@@ -21,7 +21,7 @@ class sensitivityCurves:
         return omega_gw
     
     def calViolinPlot(self):
-        data = 'PTA_figure1_data/'
+        data = 'PTA_data/'
         # Fluctuation frequencies in 15yr dataset
         Tspan = 505861299.1401644
         freq_violin = np.arange(1,15)/Tspan
@@ -64,7 +64,7 @@ class sensitivityCurves:
     def calc_15yr_PTAcurves(self):
         # --------- PTA 15 yr sensitivity curve --------
         H0 = constants.H100_s * self.h # H0 in s^-1 
-        dir = './'
+        dir = './PTA_data/'
         df = pd.read_csv(dir + 'sensitivity_curves_NG15yr_fullPTA.txt')
         omega_NANOGrav_15yr = 2 * np.pi**2 / 3 / (H0**2) * df['# Frequencies [Hz]']**2 * df['h_c [strain]']**2
         freq_PTA = df['# Frequencies [Hz]']
